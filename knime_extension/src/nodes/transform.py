@@ -1,17 +1,14 @@
 # lingbo
-import logging
-from typing import Callable
-import pandas as pd
 import geopandas as gp
+import logging
 import knime_extension as knext
 import util.knime_utils as knut
-from shapely.geometry import Point, MultiPoint, LineString
 
 LOGGER = logging.getLogger(__name__)
 
 
 category = knext.category(
-    path="/geo",
+    path="/community/geo",
     level_id="transform",
     name="Spatial Transformation",
     description="Geospatial transformation nodes",
@@ -72,7 +69,7 @@ class CrsTransformerNode:
 
     def execute(self, exec_context: knext.ExecutionContext, input_table):
         gdf = knut.load_geo_data_frame(input_table, self.geo_col, exec_context)
-        gdf = gdf.to_crs(self.new_crs)
+        gdf.to_crs(self.new_crs, inplace=True)
         crs = gdf.crs
         LOGGER.debug("CRS converted to " + self.new_crs)
         return knut.to_table(gdf, exec_context)
@@ -117,17 +114,30 @@ class GeometryToPointNode:
     geo_col = knut.geo_col_parameter()
 
     pointtype = knext.StringParameter(
-        "Selection",
+        "Point Type Selection",
         "The point type to choose from.",
         "centroid",
         enum=["centroid", "representative_point"],
     )
 
-    def configure(self, configure_context, input_schema_1):
-        knut.column_exists(self.geo_col, input_schema_1)
-        return None
+    appendtype = knext.StringParameter(
+        "Geometry Attach Type Selection",
+        "The way to attach point geometry.",
+        "Replace",
+        enum=["Replace", "Append"],
+    )
+
+    def configure(self, configure_context, input_schema):
+        self.geo_col = knut.column_exists_or_preset(
+            configure_context, self.geo_col, input_schema, knut.is_geo
+        )
+        if self.appendtype == "Replace":
+            input_schema = input_schema.remove(self.geo_col)
+        new_geo_col = knut.get_unique_column_name(self.geo_col, input_schema)
+        return input_schema.append(knext.Column(knext.logical(Point), new_geo_col))
 
     def execute(self, exec_context: knext.ExecutionContext, input_1):
+        new_geo_col = knut.get_unique_column_name(self.geo_col, input_1.schema)
         gdf = gp.GeoDataFrame(input_1.to_pandas(), geometry=self.geo_col)
         exec_context.set_progress(
             0.3, "Geo data frame loaded. Starting transformation..."
@@ -137,10 +147,13 @@ class GeometryToPointNode:
         else:
             gdf["point"] = gdf.representative_point()
         gdf = gdf.set_geometry("point")
-        gdf = gdf.drop(columns=self.geo_col)
-        gdf = gdf.rename(columns={"point": self.geo_col})
+        # gdf = gdf.drop(columns=self.geo_col)
+        gdf = gdf.rename(columns={"point": new_geo_col})
         exec_context.set_progress(0.1, "Transformation done")
         LOGGER.debug("Feature converted to " + self.pointtype)
+        if self.appendtype == "Replace":
+            gdf = gdf.drop(columns=self.geo_col)
+            gdf = gdf.rename(columns={new_geo_col: self.geo_col})
         return knext.Table.from_pandas(gdf)
 
 
@@ -241,7 +254,9 @@ class PolygonToLineNode:
     )
 
     def configure(self, configure_context, input_schema_1):
-        knut.column_exists(self.geo_col, input_schema_1)
+        self.geo_col = knut.column_exists_or_preset(
+            configure_context, self.geo_col, input_schema_1, knut.is_geo_polygon
+        )
         return None
 
     def execute(self, exec_context: knext.ExecutionContext, input_1):
@@ -309,14 +324,24 @@ class PointsToLineNode:
         include_none_column=False,
     )
 
-    def configure(self, configure_context, input_schema_1):
-        knut.column_exists(self.geo_col, input_schema_1)
+    def configure(self, configure_context, input_schema):
+        self.geo_col = knut.column_exists_or_preset(
+            configure_context, self.geo_col, input_schema, knut.is_geo_point
+        )
+        self.group_col = knut.column_exists_or_preset(
+            configure_context, self.group_col, input_schema, knut.is_string
+        )
+        self.seiral_col = knut.column_exists_or_preset(
+            configure_context, self.seiral_col, input_schema, knut.is_numeric
+        )
         return None
 
-    def execute(self, exec_context: knext.ExecutionContext, input_1):
-        gdf = gp.GeoDataFrame(input_1.to_pandas(), geometry=self.geo_col)
+    def execute(self, exec_context: knext.ExecutionContext, input):
+        gdf = gp.GeoDataFrame(input.to_pandas(), geometry=self.geo_col)
         gdf = gdf.rename(columns={self.geo_col: "geometry"})
         exec_context.set_progress(0.3, "Geo data frame loaded. Starting explosion...")
+        from shapely.geometry import MultiPoint, LineString
+
         line_gdf = (
             gdf.sort_values(by=[self.seiral_col])
             .groupby([self.group_col], as_index=False)["geometry"]
@@ -389,6 +414,8 @@ class GeometryToMultiPointNode:
         gdf = gp.GeoDataFrame(input_1.to_pandas(), geometry=self.geo_col)
         exec_context.set_progress(0.3, "Geo data frame loaded. Starting explosion...")
         gdf["points"] = gdf.apply(lambda l: l["geometry"].coords, axis=1)
+        from shapely.geometry import MultiPoint
+
         gdf["geometry"] = gdf["points"].apply(lambda l: MultiPoint(l))
         gdf = gdf.drop(columns="points")
         exec_context.set_progress(0.1, "LineToMultiPoint done")

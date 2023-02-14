@@ -20,23 +20,30 @@ LOGGER = logging.getLogger(__name__)
 DEFAULT_CRS = "epsg:4326"
 """Default coordinate reference system."""
 
-DEF_CRS_DESCRIPTION = """[Coordinate reference system (CRS)](https://en.wikipedia.org/wiki/Spatial_reference_system).
-        Common EPSG codes for world map are 
-        [4326](https://epsg.io/4326) ( WGS 84, latitude/longitude coordinate system  based on the Earth's center of mass; 
-        used by the Global Positioning System among others; unit: degree;), 
-        [3857](https://epsg.io/3857) (Web Mercator projection used for display by many web-based mapping tools,
-        including Google Maps and OpenStreetMap. unit: meter). 
-        There are corresponding EPSG codes for specific regions , such as 
-        [4269(NAD83,degree)](https://epsg.io/4326)  and [26918(NAD83 18N, meter)](https://epsg.io/4326) for North America, 
-        [4490(CGCS2000,degree)](https://epsg.io/4490) and [4479 (CGCS2000,meter)](https://epsg.io/4479  for China, 
-        Supports the following input types:
+DEF_CRS_DESCRIPTION = """Enter the 
+        [Coordinate reference system (CRS)](https://en.wikipedia.org/wiki/Spatial_reference_system) to use.
+
+        Common [EPSG codes](https://en.wikipedia.org/wiki/EPSG_Geodetic_Parameter_Dataset) that can be universally 
+        used for mapping coordinates everywhere in the world are 
+        [epsg:4326 (WGS 84, Unit: degree)](https://epsg.io/4326) (Latitude/longitude coordinate system based 
+        on the Earth's center of mass;  Used by the Global Positioning System among others) and 
+        [epsg:3857 (Unit: meter)](https://epsg.io/3857) (Web Mercator projection used by many web-based mapping tools,
+        including Google Maps and OpenStreetMap.). 
+        
+        There are EPSG codes for specific regions that provide a higher accuracy in these regions, such as 
+        [epsg:4269 (NAD83, Unit: degree)](https://epsg.io/4269) 
+        and [epsg:26918 (NAD83 18N, Unit: meter)](https://epsg.io/26918) for North America, 
+        and [epsg:4490 (CGCS2000, Unit: degree)](https://epsg.io/4490) 
+        and [epsg:4479 (CGCS2000, Unit: meter)](https://epsg.io/4479) for China.
+        
+        The input field supports the following input types:
         
         - An authority string [i.e. 'epsg:4326']
         - An EPSG integer code [i.e. 4326]
         - A tuple of ('auth_name': 'auth_code') [i.e ('epsg', '4326')]
-        - CRS WKT string
-        - PROJ string
-        - JSON string with PROJ parameters
+        - [CRS WKT string](https://www.ogc.org/standards/wkt-crs)
+        - [PROJ string](https://proj.org/usage/quickstart.html)
+        - JSON string with [PROJ parameters](https://proj.org/specifications/projjson.html)
         """
 
 
@@ -114,6 +121,15 @@ def typed_geo_col_parameter(
         include_none_column=False,
     )
 
+def negate(function):
+    """
+    Negates the incoming function e.g. negate(is_numeric) can be used in a column parameter to allow the user 
+    to select from all none numeric columns. 
+    @return: the negated input function e.g. if the input function returns true this function returns false
+    """
+    def new_function(*args, **kwargs):
+       return not function(*args, **kwargs)
+    return new_function
 
 def is_numeric(column: knext.Column) -> bool:
     """
@@ -148,12 +164,12 @@ def is_numeric_or_string(column: knext.Column) -> bool:
     Checks if column is numeric or string
     @return: True if Column is numeric or string
     """
-    return (
-        column.ktype == knext.double()
-        or column.ktype == knext.int32()
-        or column.ktype == knext.int64()
-        or column.ktype == knext.string()
-    )
+    return column.ktype in [
+        knext.double(),
+        knext.int32(),
+        knext.int64(),
+        knext.string(),
+    ]
 
 
 def is_binary(column: knext.Column) -> bool:
@@ -162,6 +178,15 @@ def is_binary(column: knext.Column) -> bool:
     @return: True if Column is binary
     """
     return column.ktype == knext.blob
+
+
+def is_date(column: knext.Column) -> bool:
+    """
+    Checks if column is compatible to the GeoValue interface and thus returns true for all geospatial types such as:
+    GeoPointCell, GeoLineCell, GeoPolygonCell, GeoMultiPointCell, GeoMultiLineCell, GeoMultiPolygonCell, ...
+    @return: True if Column Type is GeoValue compatible
+    """
+    return __is_type_x(column, "org.knime.core.data.v2.time.LocalDateValueFactory")
 
 
 def is_geo(column: knext.Column) -> bool:
@@ -274,7 +299,7 @@ def census_node_description(short_description: str, description: str, references
         s = f"{short_description}\n"
         s += f"{description}\n\n"
         # s += "___\n\n"  # separator line between description and general part
-        s += "The node is based on the data from [US Census](https://www.census.gov/)  and here are related data sources and references"
+        s += "The node is based on the data from [US Census](https://www.census.gov/) and [FIPS code](https://www.census.gov/library/reference/code-lists/ansi.html) and here are related data sources and references"
         if references is not None:
             if len(references) > 1:
                 s += "s"
@@ -501,3 +526,27 @@ def check_canceled(exec_context: knext.ExecutionContext) -> None:
     """
     if exec_context.is_canceled():
         raise RuntimeError("Execution canceled")
+
+
+def ensure_file_extension(file_name: str, file_extension: str) -> str:
+    """
+    Checks if the given file_name ends with the given file_extension and if not appends it to the returned file_name.
+    """
+    if not file_name:
+        raise knext.InvalidParametersError("Please enter a valid file name")
+    if file_name.lower().endswith(file_extension):
+        return file_name
+    return file_name + file_extension
+
+
+def Turn_all_NA_column_as_str(gdf) -> None:
+    """
+    Checks if the GeoDataFrame has columns of all NAs, otherwise it cannot be write out and makes the node crush.
+    """
+    # Transform the NA columns to string
+    NotNacol = list(gdf.dropna(axis=1, how="all").columns)
+    Nacol = gdf.loc[:, ~gdf.columns.isin(NotNacol)].columns.tolist()
+    if len(Nacol) > 0:
+        gdf[Nacol] = gdf[Nacol].astype(str)
+    gdf = gdf.reset_index(drop=True)
+    return gdf

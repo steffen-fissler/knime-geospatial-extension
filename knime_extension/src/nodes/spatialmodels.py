@@ -1,27 +1,9 @@
+import geopandas as gp
 import knime_extension as knext
 import util.knime_utils as knut
-import pandas as pd
-import geopandas as gp
-from mgwr.gwr import GWR, MGWR
-from mgwr.sel_bw import Sel_BW
-import numpy as np
-import libpysal
-import scipy.sparse
-from libpysal.weights import WSP
-import esda
-import pysal.lib as lps
-import pickle
-import seaborn as sbn
-import matplotlib.pyplot as plt
-from libpysal.weights import W
-import spreg
-from io import StringIO
-import sys
-import pulp
-from shapely.geometry import LineString
 
 __category = knext.category(
-    path="/geo",
+    path="/community/geo",
     level_id="spatialmodels",
     name="Spatial Modelling",
     description="Spatial Models Nodes",
@@ -43,7 +25,7 @@ __NODE_ICON_PATH = "icons/icon/SpatialModel/"
     # node_type=knext.NodeType.MANIPULATOR,
     category=__category,
     icon_path=__NODE_ICON_PATH + "2SLS.png",
-    after=""
+    after="",
 )
 @knext.input_table(
     name="Input Table",
@@ -67,7 +49,7 @@ __NODE_ICON_PATH = "icons/icon/SpatialModel/"
 )
 class Spatial2SLSModel:
     """Spatial two stage least squares (S2SLS) with results and diagnostics.
-    Spatial two stage least squares (S2SLS) with results and diagnostics; Anselin (1988).
+    Spatial two stage least squares (S2SLS) with results and diagnostics. More details can be found in the following reference, Luc Anselin. Spatial Econometrics: Methods and Models. Kluwer. Dordrecht, 1988.
     """
 
     # input parameters
@@ -117,6 +99,9 @@ class Spatial2SLSModel:
 
         gdf = gp.GeoDataFrame(input_1.to_pandas(), geometry=self.geo_col)
         adjust_list = input_2.to_pandas()
+
+        from libpysal.weights import W
+
         w = W.from_adjlist(adjust_list)
 
         y = gdf[self.dependent_variable].values
@@ -136,10 +121,14 @@ class Spatial2SLSModel:
         if "none" not in str(self.robust).lower():
             kws["robust"] = self.robust
 
+        import spreg
+
         model = spreg.GM_Lag(**kws)
 
         # model = spreg.GM_Lag(y, x, w=w,w_lags=self.Orders_of_W, robust= self.robust,
         # name_y=self.dependent_variable, name_x=self.independent_variables, name_w="Spatial Weights", name_ds="Input Table")
+
+        import pandas as pd
 
         results = pd.DataFrame(
             [model.name_x, model.betas, model.std_err, model.z_stat]
@@ -199,7 +188,7 @@ class Spatial2SLSModel:
     node_type=knext.NodeType.LEARNER,
     category=__category,
     icon_path=__NODE_ICON_PATH + "SpatialLag.png",
-    after=""
+    after="",
 )
 @knext.input_table(
     name="Input Table",
@@ -223,7 +212,7 @@ class Spatial2SLSModel:
 )
 class SpatialLagPanelModelwithFixedEffects:
     """Spatial Lag Panel Model with Fixed Effects.
-    Spatial Lag Panel Model with Fixed Effects.
+    Spatial Lag Panel Model with Fixed Effects. ML estimation of the fixed effects spatial lag model with all results and diagnostics. More details can be found at J. Paul Elhorst. Specification and estimation of spatial panel data models. International Regional Science Review, 26(3):244–268, 2003. doi:10.1177/0160017603253791.
     """
 
     geo_col = knut.geo_col_parameter()
@@ -250,6 +239,9 @@ class SpatialLagPanelModelwithFixedEffects:
 
         gdf = gp.GeoDataFrame(input_1.to_pandas(), geometry=self.geo_col)
         adjust_list = input_2.to_pandas()
+
+        from libpysal.weights import W
+
         w = W.from_adjlist(adjust_list)
 
         x = gdf[self.independent_variables].values
@@ -264,7 +256,12 @@ class SpatialLagPanelModelwithFixedEffects:
             "name_w": "Spatial Weights",
             "name_ds": "Input Table",
         }
+
+        import spreg
+
         model = spreg.Panel_FE_Lag(**kws)
+
+        import pandas as pd
 
         results = pd.DataFrame(
             [model.name_x, model.betas, model.std_err, model.z_stat]
@@ -324,7 +321,7 @@ class SpatialLagPanelModelwithFixedEffects:
     node_type=knext.NodeType.LEARNER,
     category=__category,
     icon_path=__NODE_ICON_PATH + "SpatialError.png",
-    after=""
+    after="",
 )
 @knext.input_table(
     name="Input Table",
@@ -348,7 +345,7 @@ class SpatialLagPanelModelwithFixedEffects:
 )
 class SpatialErrorPanelModelwithFixedEffects:
     """Spatial Error Panel Model with Fixed Effects node.
-    Spatial Error Panel Model with Fixed Effects node.
+    Spatial Error Panel Model with Fixed Effects node. ML estimation of the fixed effects spatial error model with all results and diagnostics. More details can be found at J. Paul Elhorst. Specification and estimation of spatial panel data models. International Regional Science Review, 26(3):244–268, 2003. doi:10.1177/0160017603253791.
     """
 
     geo_col = knut.geo_col_parameter()
@@ -375,6 +372,9 @@ class SpatialErrorPanelModelwithFixedEffects:
 
         gdf = gp.GeoDataFrame(input_1.to_pandas(), geometry=self.geo_col)
         adjust_list = input_2.to_pandas()
+
+        from libpysal.weights import W
+
         w = W.from_adjlist(adjust_list)
 
         x = gdf[self.independent_variables].values
@@ -389,7 +389,12 @@ class SpatialErrorPanelModelwithFixedEffects:
             "name_w": "Spatial Weights",
             "name_ds": "Input Table",
         }
+
+        import spreg
+
         model = spreg.Panel_FE_Error(**kws)
+
+        import pandas as pd
 
         results = pd.DataFrame(
             [model.name_x, model.betas, model.std_err, model.z_stat]
@@ -448,7 +453,7 @@ class SpatialErrorPanelModelwithFixedEffects:
     node_type=knext.NodeType.LEARNER,
     category=__category,
     icon_path=__NODE_ICON_PATH + "GWR.png",
-    after=""
+    after="",
 )
 @knext.input_table(
     name="Input Table",
@@ -473,7 +478,8 @@ class SpatialErrorPanelModelwithFixedEffects:
 )
 class GeographicallyWeightedRegression:
     """Geographically Weighted Regression node.
-    Geographically Weighted Regression node.
+    Performs Geographically Weighted Regression (GWR), a local form of linear regression used to model spatially varying relationships. Can currently estimate Gaussian, Poisson, and logistic models(built on a GLM framework).
+    More details can be found at [here](https://desktop.arcgis.com/en/arcmap/10.3/tools/spatial-statistics-toolbox/geographically-weighted-regression.htm).
     """
 
     geo_col = knut.geo_col_parameter()
@@ -492,14 +498,14 @@ class GeographicallyWeightedRegression:
 
     search_method = knext.StringParameter(
         "Search method",
-        "bw search method: ‘golden’, ‘interval’",
+        "Bw search method: ‘golden’, ‘interval’",
         default_value="golden",
         enum=["golden", "interval"],
     )
 
     bandwith_min = knext.IntParameter(
         "Bandwith min",
-        "min value used in bandwidth search",
+        "Min value used in bandwidth search",
         default_value=2,
     )
 
@@ -511,7 +517,7 @@ class GeographicallyWeightedRegression:
 
     kernel = knext.StringParameter(
         "Kernel",
-        "type of kernel function used to weight observations; available options: ‘gaussian’ ‘bisquare’ ‘exponential’",
+        "Type of kernel function used to weight observations; available options: ‘gaussian’ ‘bisquare’ ‘exponential’",
         default_value="bisquare",
         enum=["gaussian", "bisquare", "exponential"],
     )
@@ -536,11 +542,14 @@ class GeographicallyWeightedRegression:
         # g_y = (g_y - g_y.mean(axis=0)) / g_y.std(axis=0)
 
         # Calibrate GWR model
+        from mgwr.sel_bw import Sel_BW
 
         gwr_selector = Sel_BW(g_coords, g_y, g_X)
         gwr_bw = gwr_selector.search(bw_min=self.bandwith_min)
         # gwr_bw = gwr_selector.search(bw_min=self.bandwith_min,search_method=self.search_method)
         # print(gwr_bw)
+        from mgwr.gwr import GWR
+
         gwr_model = GWR(g_coords, g_y, g_X, gwr_bw, fixed=False).fit()
 
         gdf.loc[:, "predy"] = gwr_model.predy
@@ -554,6 +563,9 @@ class GeographicallyWeightedRegression:
             :, ["Intercept_t"] + ["%s_t" % item for item in self.independent_variables]
         ] = gwr_model.filter_tvals()
         intervals = gwr_model.get_bws_intervals(gwr_selector)
+
+        import numpy as np
+
         intervals = np.asarray(intervals)
         if gwr_bw.shape == ():
             gdf.loc[:1, "bw"] = gwr_bw
@@ -565,6 +577,9 @@ class GeographicallyWeightedRegression:
         # gdf.drop(columns=["<Row Key>"], inplace=True, axis=1)
         gdf.reset_index(drop=True, inplace=True)
 
+        from io import StringIO
+        import sys
+
         buffer = StringIO()
         sys.stdout = buffer
         gwr_model.summary()
@@ -572,6 +587,8 @@ class GeographicallyWeightedRegression:
         sys.stdout = sys.__stdout__
 
         html = """<p><pre>%s</pre>""" % summary.replace("\n", "<br/>")
+
+        import pickle
 
         model_string = pickle.dumps(gwr_model)
 
@@ -586,7 +603,7 @@ class GeographicallyWeightedRegression:
     node_type=knext.NodeType.PREDICTOR,
     category=__category,
     icon_path=__NODE_ICON_PATH + "GWRp.png",
-    after=""
+    after="",
 )
 @knext.input_table(
     name="Input Table",
@@ -599,11 +616,11 @@ class GeographicallyWeightedRegression:
 )
 @knext.output_table(
     name="Output Table",
-    description="Output table for Geographically Weighted Regression Predictor",
+    description="Output table with predictions for Geographically Weighted Regression Predictor",
 )
 class GeographicallyWeightedRegressionPredictor:
     """Geographically Weighted Regression Predictor node.
-    Geographically Weighted Regression Predictor node.
+    Geographically Weighted Regression Predictor. It will predict the dependent variable using the model and the input table.
     """
 
     geo_col = knut.geo_col_parameter()
@@ -627,8 +644,14 @@ class GeographicallyWeightedRegressionPredictor:
         g_X = gdf[self.independent_variables].values
         u = gdf["geometry"].x
         v = gdf["geometry"].y
+
+        import numpy as np
+
         g_coords = np.array(list(zip(u, v)))
         # g_X = (g_X - g_X.mean(axis=0)) / g_X.std(axis=0)
+
+        import pickle
+
         gwr_model = pickle.loads(model)
 
         gdf.loc[:, "predy"] = gwr_model.model.predict(g_coords, g_X).predictions
@@ -646,7 +669,7 @@ class GeographicallyWeightedRegressionPredictor:
     node_type=knext.NodeType.LEARNER,
     category=__category,
     icon_path=__NODE_ICON_PATH + "MGWR.png",
-    after=""
+    after="",
 )
 @knext.input_table(
     name="Input Table",
@@ -667,7 +690,7 @@ class GeographicallyWeightedRegressionPredictor:
 )
 class MultiscaleGeographicallyWeightedRegression:
     """Multiscale Geographically Weighted Regression node.
-    Multiscale Geographically Weighted Regression node.
+    Multiscale Geographically Weighted Regression estimation. More details can be found at A. Stewart Fotheringham, Wenbai Yang, and Wei Kang. Multiscale geographically weighted regression (mgwr). Annals of the American Association of Geographers, 107(6):1247–1265, 2017. URL: http://dx.doi.org/10.1080/24694452.2017.1352480, arXiv:http://dx.doi.org/10.1080/24694452.2017.1352480, doi:10.1080/24694452.2017.1352480. and Hanchen Yu, Alexander Stewart Fotheringham, Ziqi Li, Taylor Oshan, Wei Kang, and Levi John Wolf. Inference in multiscale geographically weighted regression. Geographical Analysis, 2019. URL: https://onlinelibrary.wiley.com/doi/abs/10.1111/gean.12189, arXiv:https://onlinelibrary.wiley.com/doi/pdf/10.1111/gean.12189, doi:10.1111/gean.12189.
     """
 
     geo_col = knut.geo_col_parameter()
@@ -686,14 +709,14 @@ class MultiscaleGeographicallyWeightedRegression:
 
     search_method = knext.StringParameter(
         "Search method",
-        "bw search method: ‘golden’, ‘interval’",
+        "Bw search method: ‘golden’, ‘interval’",
         default_value="golden",
         enum=["golden", "interval"],
     )
 
     bandwith_min = knext.IntParameter(
         "Bandwith min",
-        "min value used in bandwidth search",
+        "Min value used in bandwidth search",
         default_value=2,
     )
 
@@ -730,8 +753,12 @@ class MultiscaleGeographicallyWeightedRegression:
         # g_y = (g_y - g_y.mean(axis=0)) / g_y.std(axis=0)
 
         # Calibrate MGWR model
+        from mgwr.sel_bw import Sel_BW
+
         mgwr_selector = Sel_BW(g_coords, g_y, g_X, multi=True)
         mgwr_bw = mgwr_selector.search(multi_bw_min=[self.bandwith_min])
+        from mgwr.gwr import MGWR
+
         mgwr_model = MGWR(
             g_coords,
             g_y,
@@ -753,6 +780,9 @@ class MultiscaleGeographicallyWeightedRegression:
             :, ["Intercept_t"] + ["%s_t" % item for item in self.independent_variables]
         ] = mgwr_model.filter_tvals()
         intervals = mgwr_model.get_bws_intervals(mgwr_selector)
+
+        import numpy as np
+
         intervals = np.asarray(intervals)
         if mgwr_bw.shape == ():
             gdf.loc[:1, "bw"] = mgwr_bw
@@ -764,6 +794,9 @@ class MultiscaleGeographicallyWeightedRegression:
         # gdf.drop(columns=["<Row Key>"], inplace=True, axis=1)
         gdf.reset_index(drop=True, inplace=True)
 
+        from io import StringIO
+        import sys
+
         buffer = StringIO()
         sys.stdout = buffer
         mgwr_model.summary()
@@ -771,6 +804,8 @@ class MultiscaleGeographicallyWeightedRegression:
         sys.stdout = sys.__stdout__
 
         html = """<p><pre>%s</pre>""" % summary.replace("\n", "<br/>")
+
+        import pickle
 
         model_string = pickle.dumps(mgwr_model)
 
@@ -855,7 +890,7 @@ class MultiscaleGeographicallyWeightedRegression:
     node_type=knext.NodeType.LEARNER,
     category=__category,
     icon_path=__NODE_ICON_PATH + "SpatialOLS.png",
-    after=""
+    after="",
 )
 @knext.input_table(
     name="Input Table",
@@ -879,7 +914,8 @@ class MultiscaleGeographicallyWeightedRegression:
 )
 class SpatialOLS:
     """Spatial OLS node.
-    Spatial OLS node.
+    Ordinary least squares with results and diagnostics. More information can be found at
+    [here](https://spreg.readthedocs.io/en/latest/generated/spreg.OLS.html)
     """
 
     geo_col = knut.geo_col_parameter()
@@ -907,10 +943,15 @@ class SpatialOLS:
     def execute(self, exec_context: knext.ExecutionContext, input_1, input_2):
         gdf = gp.GeoDataFrame(input_1.to_pandas(), geometry=self.geo_col)
         adjust_list = input_2.to_pandas()
+
+        from libpysal.weights import W
+
         w = W.from_adjlist(adjust_list)
         # Prepare Georgia dataset inputs
         X = gdf[self.independent_variables].values
         y = gdf[self.dependent_variable].values
+
+        import spreg
 
         model = spreg.OLS(
             y,
@@ -922,6 +963,8 @@ class SpatialOLS:
             name_y=self.dependent_variable,
             name_x=self.independent_variables,
         )
+
+        import pandas as pd
 
         results = pd.DataFrame(
             [model.name_x, model.betas, model.std_err, model.t_stat]
@@ -980,7 +1023,7 @@ class SpatialOLS:
     node_type=knext.NodeType.LEARNER,
     category=__category,
     icon_path=__NODE_ICON_PATH + "MLLag.png",
-    after=""
+    after="",
 )
 @knext.input_table(
     name="Input Table",
@@ -1004,7 +1047,7 @@ class SpatialOLS:
 )
 class SpatialML_Lag:
     """Spatial ML_Lag.
-    Spatial ML_Lag.
+    ML estimation of the spatial lag model with all results and diagnostics. More details can be found at Luc Anselin. Spatial Econometrics: Methods and Models. Kluwer, Dordrecht, 1988.
     """
 
     geo_col = knut.geo_col_parameter()
@@ -1032,10 +1075,15 @@ class SpatialML_Lag:
     def execute(self, exec_context: knext.ExecutionContext, input_1, input_2):
         gdf = gp.GeoDataFrame(input_1.to_pandas(), geometry=self.geo_col)
         adjust_list = input_2.to_pandas()
+
+        from libpysal.weights import W
+
         w = W.from_adjlist(adjust_list)
         # Prepare Georgia dataset inputs
         X = gdf[self.independent_variables].values
         y = gdf[self.dependent_variable].values
+
+        import spreg
 
         model = spreg.ML_Lag(
             y,
@@ -1045,6 +1093,8 @@ class SpatialML_Lag:
             name_x=self.independent_variables,
             name_y=self.dependent_variable,
         )
+
+        import pandas as pd
 
         results = pd.DataFrame(
             [model.name_x, model.betas, model.std_err, model.z_stat]
@@ -1104,7 +1154,7 @@ class SpatialML_Lag:
     node_type=knext.NodeType.LEARNER,
     category=__category,
     icon_path=__NODE_ICON_PATH + "MLErr.png",
-    after=""
+    after="",
 )
 @knext.input_table(
     name="Input Table",
@@ -1128,7 +1178,7 @@ class SpatialML_Lag:
 )
 class SpatialML_Error:
     """Spatial ML_Error.
-    Spatial ML_Error.
+    ML estimation of the spatial error model with all results and diagnostics. More details can be found at Luc Anselin. Spatial Econometrics: Methods and Models. Kluwer, Dordrecht, 1988.
     """
 
     geo_col = knut.geo_col_parameter()
@@ -1156,10 +1206,15 @@ class SpatialML_Error:
     def execute(self, exec_context: knext.ExecutionContext, input_1, input_2):
         gdf = gp.GeoDataFrame(input_1.to_pandas(), geometry=self.geo_col)
         adjust_list = input_2.to_pandas()
+
+        from libpysal.weights import W
+
         w = W.from_adjlist(adjust_list)
         # Prepare Georgia dataset inputs
         X = gdf[self.independent_variables].values
         y = gdf[self.dependent_variable].values
+
+        import spreg
 
         model = spreg.ML_Error(
             y,
@@ -1169,6 +1224,8 @@ class SpatialML_Error:
             name_x=self.independent_variables,
             name_y=self.dependent_variable,
         )
+
+        import pandas as pd
 
         results = pd.DataFrame(
             [model.name_x, model.betas, model.std_err, model.z_stat]

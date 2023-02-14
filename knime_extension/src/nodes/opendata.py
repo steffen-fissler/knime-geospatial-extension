@@ -1,14 +1,10 @@
-from typing import Callable
-from wsgiref.util import shift_path_info
-import pandas as pd
 import geopandas as gp
 import knime_extension as knext
 import util.knime_utils as knut
-import requests
-import osmnx as ox
+
 
 __category = knext.category(
-    path="/geo",
+    path="/community/geo",
     level_id="opendataset",
     name="Open Datasets",
     description="Nodes for providing open geospatial datasets.",
@@ -38,25 +34,27 @@ __NODE_ICON_PATH = "icons/icon/OpenDataset/"
     short_description="Retrieve geospatial data from US Census TIGER/Line",
     description="This node retrieves the specific geospatial boundaries for one specific state of the United States."
     + "The popular TIGER/Line levels are Block group, Roads, Blocks,Tracts."
-    + "When the same State FIPS (2-digits) is used for County FIPS(3-digits), the geodata of all counties in the state will be retrieved,"
-    + "county10/20 and state10/20 can only be applicable in this case. ",
+    + "When the same State FIPS (2-digits) or * is used for County FIPS(3-digits), the geodata of all counties in the state will be retrieved,"
+    + "county10/20 and state10/20 can only be applicable in this case. "
+    + "This node can help user to get the FIPS codes of target study area. Linking it to Geospatial View node will be more helpful. ",
     references={
         "TIGER/Line Shapefiles": "https://www.census.gov/geographies/mapping-files/time-series/geo/tiger-line-file.2020.html",
         "FTP Archive by State": "https://www2.census.gov/geo/tiger/TIGER2020PL/STATE/",
         "FTP Archive by Layer": "https://www2.census.gov/geo/tiger/TIGER2020PL/LAYER/",
+        "FIPS code list": "https://transition.fcc.gov/oet/info/maps/census/fips/fips.txt",
     },
 )
 class US2020TIGERNode:
 
     StateFips = knext.StringParameter(
         label="State FIPS (2-digits)",
-        description="The State to use",
+        description="The State to use [FIPS](https://transition.fcc.gov/oet/info/maps/census/fips/fips.txt)",
         default_value="",
     )
 
     County3Fips = knext.StringParameter(
-        "County FIPS(3-digits)/ or State FIPS ",
-        "The County/State FIPS code to use",
+        "County FIPS(3-digits)/ State FIPS or * ",
+        "The County/State FIPS code to use [FIPS](https://transition.fcc.gov/oet/info/maps/census/fips/fips.txt)",
         "",
     )
 
@@ -91,6 +89,8 @@ class US2020TIGERNode:
         return None
 
     def execute(self, exec_context: knext.ExecutionContext):
+        import pandas as pd
+
         USdict = pd.DataFrame.from_dict(
             {
                 "state": [
@@ -221,7 +221,8 @@ class US2020TIGERNode:
             data_url = f"{base_url}{Statepath}/{County5Fips}/tl_2020_{County5Fips}_{self.geofile}.zip"
         gdf = gp.read_file(data_url)
         gdf1 = gdf.reset_index(drop=True)
-        # gdf1=gdf1[["GEOID20","geometry"]]
+        # Transform the NA columns to string
+        gdf1 = knut.Turn_all_NA_column_as_str(gdf1)
         return knext.Table.from_pandas(gdf1)
 
 
@@ -254,19 +255,20 @@ class US2020TIGERNode:
         "Geography": "https://api.census.gov/data/2020/dec/pl/geography.html",
         "Variables": "https://api.census.gov/data/2020/dec/pl/variables.html",
         "Census API examples": "https://api.census.gov/data/2020/dec/pl/examples.html",
+        "FIPS code list": "https://transition.fcc.gov/oet/info/maps/census/fips/fips.txt",
     },
 )
 class USCensus2020Node:
 
     StateFips = knext.StringParameter(
         "State FIPS (2-digits)",
-        "The State to investigate, input * for all states (while choose county for geography)",
+        "The State [FIPS](https://transition.fcc.gov/oet/info/maps/census/fips/fips.txt) to investigate, input * for all states (while choose county for geography)",
         "25",
     )
 
     County3Fips = knext.StringParameter(
         "County FIPS (3-digits)",
-        "The County to investigate, input * for all counties",
+        "The County [FIPS](https://transition.fcc.gov/oet/info/maps/census/fips/fips.txt) to investigate, input * for all counties",
         "017",
     )
 
@@ -306,9 +308,16 @@ class USCensus2020Node:
         else:
             data_url = f"{base_url}{self.cols}&for={self.geofile}:*&in=state:{self.StateFips}&in=county:{self.County3Fips}&in=tract:{self.Tract6Fips}&key={self.censusapikey}"
 
+        import requests
+
         response = requests.get(data_url)
         data = response.json()
+
+        import pandas as pd
+
         gdf = pd.DataFrame(data[1:], columns=data[0])
+        if "GEO_ID" in gdf.columns:
+            gdf["GEO_ID"] = gdf["GEO_ID"].str.replace(r".*US", "", regex=True)
         return knext.Table.from_pandas(gdf)
 
 
@@ -342,19 +351,20 @@ class USCensus2020Node:
         "Geography": "https://api.census.gov/data/2020/acs/acs5/geography.html",
         "Variables": "https://api.census.gov/data/2020/acs/acs5/variables.html",
         "Census API examples": "https://api.census.gov/data/2020/acs/acs5/subject/examples.html",
+        "FIPS code list": "https://transition.fcc.gov/oet/info/maps/census/fips/fips.txt",
     },
 )
 class UScensusACSNode:
 
     StateFips = knext.StringParameter(
         "State FIPS (2-digits)",
-        "The State to investigate, input * for all states (while choose county for geography)",
+        "The State [FIPS](https://transition.fcc.gov/oet/info/maps/census/fips/fips.txt) to investigate, input * for all states (while choose county for geography)",
         "25",
     )
 
     County3Fips = knext.StringParameter(
         "County FIPS (3-digits)",
-        "The County to investigate, input * for all counties",
+        "The County [FIPS](https://transition.fcc.gov/oet/info/maps/census/fips/fips.txt) to investigate, input * for all counties",
         "017",
     )
 
@@ -401,10 +411,42 @@ class UScensusACSNode:
         else:
             data_url = f"{base_url}{self.year}/{Dataset}?get={self.cols}&for=block%20group:*&in=state:{self.StateFips}&in=county:{self.County3Fips}&in=tract:{self.Tract6Fips}&key={self.censusapikey}"
 
+        import requests
+
         response = requests.get(data_url)
         data = response.json()
+
+        import pandas as pd
+
         gdf = pd.DataFrame(data[1:], columns=data[0])
+        if "GEO_ID" in gdf.columns:
+            gdf["GEO_ID"] = gdf["GEO_ID"].str.replace(r".*US", "", regex=True)
         return knext.Table.from_pandas(gdf)
+
+
+############################################
+# OSM nodes
+############################################
+# TODO:Use this global temp dir for the OSMNX cache file until we have a way to get the KNIME workspace location
+osm_root_dir = None
+
+
+def get_osmnx():
+    """
+    Initializes and returns the osmnx module
+    """
+    import os
+    import osmnx as ox
+    import tempfile
+
+    # use global variable to reuse the cache in subsequent calls of the method
+    global osm_root_dir
+    if osm_root_dir is None:
+        osm_root_dir = tempfile.gettempdir()
+        cache_dir = os.path.join(osm_root_dir, "knime_osmnx_cache")
+        ox.settings.use_cache = True
+        ox.settings.cache_folder = cache_dir
+    return ox
 
 
 ############################################
@@ -468,13 +510,15 @@ class OSMdataNode:
 
     def execute(self, exec_context: knext.ExecutionContext, input_1):
         gdf = gp.GeoDataFrame(input_1.to_pandas(), geometry=self.geo_col)
-        gdf_union = gdf.to_crs(4326).unary_union
+        gdf.to_crs(4326, inplace=True)
+        gdf_union = gdf.unary_union
         if self.tagvalue != "True":
             tags = {self.taginfo: self.tagvalue}
         else:
             tags = {self.taginfo: True}
         # tags = {self.taginfo: self.tagvalue}
-        gdfpoi = ox.geometries.geometries_from_polygon(gdf_union, tags)
+
+        gdfpoi = get_osmnx().geometries.geometries_from_polygon(gdf_union, tags)
         gdfpoi = gdfpoi.reset_index(drop=True)
         return knext.Table.from_pandas(gdfpoi)
 
@@ -531,7 +575,11 @@ class OSMnetworkNode:
 
     def execute(self, exec_context: knext.ExecutionContext, input_1):
         gdf = gp.GeoDataFrame(input_1.to_pandas(), geometry=self.geo_col)
-        gdf_union = gdf.to_crs(4326).unary_union
+        gdf.to_crs(4326, inplace=True)
+        gdf_union = gdf.unary_union
+
+        ox = get_osmnx()
+
         G = ox.graph.graph_from_polygon(gdf_union, self.networktype)
         if self.networktype == "drive":
             # impute speed on all edges missing data
@@ -588,6 +636,7 @@ class OSMGeoBoundaryNode:
         return None
 
     def execute(self, exec_context: knext.ExecutionContext):
-        gdf = ox.geocode_to_gdf(self.placename)
+
+        gdf = get_osmnx().geocode_to_gdf(self.placename)
         gdf = gdf.reset_index(drop=True)
         return knext.Table.from_pandas(gdf)

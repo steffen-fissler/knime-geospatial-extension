@@ -1,17 +1,14 @@
+import geopandas as gp
 import knime_extension as knext
 import util.knime_utils as knut
-import pandas as pd
-import geopandas as gp
-import pulp
-from shapely.geometry import LineString
-import numpy as np
+
 
 # import pickle
 # from io import StringIO
 # import sys
 
 __category = knext.category(
-    path="/geo",
+    path="/community/geo",
     level_id="LocationAnalysis",
     name="Location Analysis",
     description="Location Analysis",
@@ -31,7 +28,7 @@ __NODE_ICON_PATH = "icons/icon/LocationAnalysis/"
     node_type=knext.NodeType.MANIPULATOR,
     icon_path=__NODE_ICON_PATH + "pmedian.png",
     category=__category,
-    after=""
+    after="",
 )
 @knext.input_table(
     name="Input OD list with geometries ",
@@ -128,7 +125,7 @@ class PmedianNode:
         # ])
 
     def execute(self, exec_context: knext.ExecutionContext, input_1):
-        df = gp.GeoDataFrame(input_1.to_pandas(),geometry=self.DemandGeometry)
+        df = gp.GeoDataFrame(input_1.to_pandas(), geometry=self.DemandGeometry)
         # Sort with DID and SID
         df = df.sort_values(by=[self.DemandID, self.SupplyID]).reset_index(drop=True)
 
@@ -148,14 +145,15 @@ class PmedianNode:
             .rename(columns={"index": self.SupplyID, self.SupplyGeometry: "geometry"})
         )
         DemandPt = gp.GeoDataFrame(DemandPt, geometry="geometry")
-        SupplyPt = gp.GeoDataFrame(SupplyPt, geometry="geometry")        
+        SupplyPt = gp.GeoDataFrame(SupplyPt, geometry="geometry")
         DemandPt = DemandPt.set_crs(df.crs)
         SupplyPt = SupplyPt.set_crs(df.crs)
-
 
         # calculate parameter for matrix
         num_trt = DemandPt.shape[0]
         num_hosp = SupplyPt.shape[0]
+
+        import pulp
 
         # define problem
         problem = pulp.LpProblem("pmedian", sense=pulp.LpMinimize)
@@ -214,16 +212,19 @@ class PmedianNode:
                 i, j = getIndex(it)
                 DemandPt.at[i, "assignSID"] = SupplyPt.at[j, self.SupplyID]
                 DemandPt.at[i, "SIDcoord"] = SupplyPt.at[j, "geometry"]
+
+        from shapely.geometry import LineString
+
         DemandPt["linxy"] = [
             LineString(xy) for xy in zip(DemandPt["geometry"], DemandPt["SIDcoord"])
         ]
-        DemandPt["SIDwkt"] = DemandPt.set_geometry("SIDcoord").geometry.to_wkt()
-        DemandPt["Linewkt"] = DemandPt.set_geometry("linxy").geometry.to_wkt()
+        SIDwkt = gp.GeoDataFrame(geometry=DemandPt.SIDcoord, crs=df.crs)
+        Linewkt = gp.GeoDataFrame(geometry=DemandPt.linxy, crs=df.crs)
+        DemandPt["SIDwkt"] = SIDwkt.geometry
+        DemandPt["Linewkt"] = Linewkt.geometry
         DemandPt = DemandPt.drop(columns=["linxy", "SIDcoord"])
         DemandPt = DemandPt.reset_index(drop=True)
-        # DemandPt=DemandPt.rename(columns={'geometry':'DIDgeometry'})
-        gdf = gp.GeoDataFrame(DemandPt, geometry="geometry", crs=df.crs)
-        return knext.Table.from_pandas(gdf)
+        return knext.Table.from_pandas(DemandPt)
 
 
 ############################################
@@ -234,7 +235,7 @@ class PmedianNode:
     node_type=knext.NodeType.MANIPULATOR,
     icon_path=__NODE_ICON_PATH + "LSCP.png",
     category=__category,
-    after=""
+    after="",
 )
 @knext.input_table(
     name="Input OD list with geometries ",
@@ -322,7 +323,7 @@ class LSCPNode:
         # ])
 
     def execute(self, exec_context: knext.ExecutionContext, input_1):
-        df = gp.GeoDataFrame(input_1.to_pandas(),geometry=self.DemandGeometry)
+        df = gp.GeoDataFrame(input_1.to_pandas(), geometry=self.DemandGeometry)
         # Sort with DID and SID
         df = df.sort_values(by=[self.DemandID, self.SupplyID]).reset_index(drop=True)
 
@@ -352,6 +353,8 @@ class LSCPNode:
 
         df["within"] = 0
         df.loc[(df[self.ODcost] <= self.threshold), "within"] = 1
+
+        import pulp
 
         # define problem
         problem = pulp.LpProblem("LSCPProblem", sense=pulp.LpMinimize)
@@ -386,6 +389,8 @@ class LSCPNode:
         DemandPt["assignSID"] = None
         DemandPt["SIDcoord"] = None
 
+        import pandas as pd
+
         area = pd.DataFrame(columns=["OID"])
         for it in X:
             v = varX[it]
@@ -404,16 +409,19 @@ class LSCPNode:
             oid = int(df.at[index, self.SupplyID])
             DemandPt.at[it, "assignSID"] = SupplyPt.at[oid, self.SupplyID]
             DemandPt.at[it, "SIDcoord"] = SupplyPt.at[oid, "geometry"]
+
+        from shapely.geometry import LineString
+
         DemandPt["linxy"] = [
             LineString(xy) for xy in zip(DemandPt["geometry"], DemandPt["SIDcoord"])
         ]
-        DemandPt["SIDwkt"] = DemandPt.set_geometry("SIDcoord").geometry.to_wkt()
-        DemandPt["Linewkt"] = DemandPt.set_geometry("linxy").geometry.to_wkt()
-
+        SIDwkt = gp.GeoDataFrame(geometry=DemandPt.SIDcoord, crs=df.crs)
+        Linewkt = gp.GeoDataFrame(geometry=DemandPt.linxy, crs=df.crs)
+        DemandPt["SIDwkt"] = SIDwkt.geometry
+        DemandPt["Linewkt"] = Linewkt.geometry
         DemandPt = DemandPt.drop(columns=["linxy", "SIDcoord"])
         DemandPt = DemandPt.reset_index(drop=True)
-        gdf = gp.GeoDataFrame(DemandPt, geometry="geometry", crs=df.crs)
-        return knext.Table.from_pandas(gdf)
+        return knext.Table.from_pandas(DemandPt)
 
 
 ############################################
@@ -424,7 +432,7 @@ class LSCPNode:
     node_type=knext.NodeType.MANIPULATOR,
     icon_path=__NODE_ICON_PATH + "MCLP.png",
     category=__category,
-    after=""
+    after="",
 )
 @knext.input_table(
     name="Input OD list with geometries ",
@@ -524,7 +532,7 @@ class MCLPNode:
         # ])
 
     def execute(self, exec_context: knext.ExecutionContext, input_1):
-        df = gp.GeoDataFrame(input_1.to_pandas(),geometry=self.DemandGeometry)
+        df = gp.GeoDataFrame(input_1.to_pandas(), geometry=self.DemandGeometry)
         # Sort with DID and SID
         df = df.sort_values(by=[self.DemandID, self.SupplyID]).reset_index(drop=True)
 
@@ -554,6 +562,8 @@ class MCLPNode:
 
         df["within"] = 0
         df.loc[(df[self.ODcost] <= self.threshold), "within"] = 1
+
+        import pulp
 
         # define problem
         problem = pulp.LpProblem("MCLP", sense=pulp.LpMinimize)
@@ -593,6 +603,8 @@ class MCLPNode:
         DemandPt["assignSID"] = None
         DemandPt["SIDcoord"] = None
 
+        import pandas as pd
+
         area = pd.DataFrame(columns=["OID"])
         for it in X:
             v = varX[it]
@@ -610,13 +622,16 @@ class MCLPNode:
             oid = int(df.at[index, self.SupplyID])
             DemandPt.at[it, "assignSID"] = SupplyPt.at[oid, self.SupplyID]
             DemandPt.at[it, "SIDcoord"] = SupplyPt.at[oid, "geometry"]
+
+        from shapely.geometry import LineString
+
         DemandPt["linxy"] = [
             LineString(xy) for xy in zip(DemandPt["geometry"], DemandPt["SIDcoord"])
         ]
-        DemandPt["SIDwkt"] = DemandPt.set_geometry("SIDcoord").geometry.to_wkt()
-        DemandPt["Linewkt"] = DemandPt.set_geometry("linxy").geometry.to_wkt()
+        SIDwkt = gp.GeoDataFrame(geometry=DemandPt.SIDcoord, crs=df.crs)
+        Linewkt = gp.GeoDataFrame(geometry=DemandPt.linxy, crs=df.crs)
+        DemandPt["SIDwkt"] = SIDwkt.geometry
+        DemandPt["Linewkt"] = Linewkt.geometry
         DemandPt = DemandPt.drop(columns=["linxy", "SIDcoord"])
         DemandPt = DemandPt.reset_index(drop=True)
-        # DemandPt=DemandPt.rename(columns={'geometry':'DIDgeometry'})
-        gdf = gp.GeoDataFrame(DemandPt, geometry="geometry", crs=df.crs)
-        return knext.Table.from_pandas(gdf)
+        return knext.Table.from_pandas(DemandPt)
